@@ -1,0 +1,184 @@
+---
+title: "HW01"
+author: "2021195007 Soyeon Shin"
+date: "2024-03-23"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Initial Settings
+```{r}
+rm(list=ls())
+```
+
+### Set working directory for the training data
+```{r}
+setwd("/Users/shinsoyeon/Desktop/2024-1/deeplearning/R")
+getwd()
+```
+
+### Read the input files
+```{r}
+load("/Users/shinsoyeon/Desktop/2024-1/deeplearning/R/malaria.RData")
+```
+
+
+## Question 1
+
+We will fit the linear regression model by using malaria.RData - the response variable is Malaria, and covariates are log(Pop), Rain dummy variable, and Vegetation dummy variable.
+
+Each variable has size of 557.
+  
+(a) (5 points) Construct the dummy variable for Rain. For each location, if the value of Rain > median(Rain), set 1; otherwise 0.
+
+```{r}
+median_rain <- median(Rain)
+Rain.dummy <- ifelse(Rain > median_rain, 1, 0)
+```
+This is the code of setting dummy variable of Rain. I used ifelse function to meet the condition: set 1 if the value of Rain>median(Rain), set 0 otherwise.  
+```{r, echo=TRUE, results='markup'}
+head(Rain)
+head(Rain.dummy)
+```
+These results show that dummy variable is successfully created.
+\
+\
+<br>
+\
+\
+\
+\
+(b) (5 points) Construct the dummy variable for Vegetation. For each location, if the value of Vegetation > median(Vegetation), set 1; otherwise 0.
+```{r}
+median_veg <- median(Vegetation)
+Vegetation.dummy <- ifelse(Vegetation > median_veg, 1, 0)
+```
+This is the code of setting dummy variable of Vegetation.
+```{r, echo=TRUE, results='markup'}
+head(Vegetation)
+head(Vegetation.dummy)
+```
+Vegetation dummy variable is successfully created.
+<br>
+\
+\
+
+(c) (15 points) Construct the design matrix X by using an intercept, log(Pop), Rain dummy variable, and Vegetation dummy variable
+
+```{r, echo=TRUE, results='markup'}
+X <-  cbind(1, log(Pop),Rain.dummy,Vegetation.dummy)
+head(X)
+```
+We put 1 as an intercept. Design Matrix X has size of 557*4.
+<br>
+\
+\
+
+(d) (15 points) Calculate $\hat \beta = (X^\prime X)^{-1} X^\prime y$ and standard error of $\hat \beta$ without using lm function in R.
+
+```{r, echo=TRUE, results='markup'}
+y <- Malaria
+beta.hat <- solve(t(X)%*%X)%*%t(X)%*%y
+sigmasq.hat <- as.numeric(t(y-X%*%beta.hat)%*%(y-X%*%beta.hat)/(557-4))
+sigma.hat <- sqrt(diag(solve(t(X)%*%X))*sigmasq.hat)
+beta.hat
+```
+$\hat \beta: (X^\prime X)^{-1} X^\prime y$
+
+${\sigma}^2: \frac{SSE}{n-p-1}$
+n=557, p=3
+
+standard error of $\hat \beta: \sqrt{\left[\widehat{\sigma}^2\left(X^{\prime} X\right)^{-1}\right]_{i, i}}$
+
+<br>
+\
+\
+(e) (10 points) Now using lm function, fit the same linear regression model. Then compare the results with $\hat \beta$ and standard errors calculated in problem 1(d).
+```{r, echo=TRUE, results='markup'}
+model <- lm(Malaria ~ log(Pop) + Rain.dummy + Vegetation.dummy)
+summary(model)
+beta.hat
+sigma.hat
+```
+Modeled the input data with linear model function. Response variable is Malaria, and covariates are log(Pop), Rain.dummy, Vegetation.dummy.
+
+Comparation) Is beta.hat same the coefficients obtained from model?
+We can confirm that Estimation of Coefficients from summary(model) is same with beta.hat results.
+
+Comparation) Is sigma.hat same the errors obtained from model?
+We can confirm that Error of Coefficients from summary(model) is same with sigma.hat results.
+<br>
+\
+## Question 2
+
+We will fit the Poisson regression model by using malaria.RData - the response variable is Malaria, and covariates are log(Pop), Rain dummy variable, and Vegetation dummy variable.
+
+## Initial Settings
+```{}
+library(ngspatial)
+set.seed(1)
+```
+
+(a) (20 points) Randomly divide the data into training (400 number of samples) and test sets (157 number of samples). Fit a Poisson regression using a training set (you may use glm function in R). Which variables are significant? Provide interpretation of regression coefficients $\beta$ for all significant covariates.
+
+
+```{r, echo=TRUE, results='markup'}
+data_df <- data.frame(Malaria, log(Pop), Rain.dummy, Vegetation.dummy)
+n_train <- 400
+n_test <- 157
+
+shuffled_data <- sample(data_df)
+
+train_data <- shuffled_data[1:n_train, ]
+test_data <- shuffled_data[(n_train+1):557, ]
+
+fit.poi <- glm(train_data$Malaria~., data = train_data, family="poisson")
+
+summary(fit.poi)
+```
+## Interpretation
+
+What variable has significant p value?
+Rain.dummy: 0.02
+log(Pop): <2e-16
+
+What is the coefficient of each variable?
+Rain.dummy: 0.09>0 (directly proportional)
+log(Pop): -0.16<0 (indirectly proportional)
+Thus, if Rain.dummy increases by 1 level, response variable increases by 0.09 level. If log(Pop) increases by 1 level, response variable increases by -0.16 level.
+<br>
+\
+\
+\
+\
+\
+(b) (20 points) Using the fitted model above, predict a response for test data sets. Calculate the root mean square error for the test data set as follows.
+$$
+\sqrt{\frac{1}{157} \sum_{i=1}^{157}\left(\widehat{Y}_{\text {pred }, i}-Y_{\text {test }, i}\right)^2}
+$$
+where Ypred,i is a predicted value from your model and Ytest,i is a response
+variable from the test dataset.
+```{r, echo=TRUE, results='markup'}
+predicted_val <- predict(fit.poi, newdata=test_data, type="response")
+poi_mse <- sqrt(sum((predicted_val-test_data$Malaria)^2)/157)
+poi_mse
+```
+Result: 9.344053
+<br>
+\
+\
+(c) (10 points) Now, using the same training dataset, fit the linear regression model. Here, you should use Malaria as a response variable and other variables (log(Pop), Rain dummy variable, and Vegetation dummy variable). Calculate the root mean square error for the test dataset (as in 2(b)) and compare the prediction performance between two models (linear model versus Poisson model).
+
+```{r, echo=TRUE, results='markup'}
+fit.lm <- lm(train_data$Malaria~., data=train_data)
+lm.pred <- predict(fit.lm, newdata=test_data, type="response")
+lm_mse <- lm_mse <- sqrt(sum((lm.pred-test_data$Malaria)^2)/157)
+lm_mse
+```
+Result: 9.277807
+
+
+We should minimize mse: mse of linear model is smaller than mse of poisson glm model. Thus linear model works better than poisson model.
