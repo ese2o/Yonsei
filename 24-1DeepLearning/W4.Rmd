@@ -1,9 +1,3 @@
----
-title: "HW4"
-author: "2021195007 Soyeon Shin"
-date: "2024-05-05"
-output: pdf_document
----
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
