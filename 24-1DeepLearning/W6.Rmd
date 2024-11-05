@@ -1,0 +1,358 @@
+---
+title: "HW6"
+author: "2021195007 Soyeon Shin"
+date: "2024-06-03"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Question 1
+## (a)
+First, I imported some necessary libraries to use in my code.
+
+```python
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.layers import LSTM
+from keras.layers import Dropout
+```
+
+Then I got the data with read.csv function.
+```python
+dataset = pd.read_csv('/Users/shinsoyeon/Downloads/KoreaCovid.csv')
+```
+
+In order to plot the data simply, I did some preprocessing on the data. I converted Date data into pandas datetime format.
+```python
+Confirmed = dataset['Confirmed']
+Recovered = dataset['Recovered']
+Deaths = dataset['Deaths']
+Date = pd.to_datetime(dataset['Date'])
+```
+
+Then I drew a time series plot of the confirmed, recovered and deaths.
+```python
+plt.figure(figsize=(14, 7))
+plt.plot(Date, Confirmed, label='Confirmed')
+plt.plot(Date, Recovered, label='Recovered')
+plt.plot(Date, Deaths, label='Deaths')
+
+plt.title('COVID-19 in Korea: Confirmed, Recovered, and Deaths (2020)')
+plt.xlabel('Date')
+plt.ylabel('Number of Cases')
+plt.legend()
+plt.grid(True)
+plt.show()
+```
+
+This is the result.
+
+
+
+![](/Users/shinsoyeon/Desktop/output.png)
+
+This plot shows that Confirmed data and Recovered data show similar trends. Both graphs are upward and slightly different in time. Seeing that the recovered data is on the right, i.e. beyond, it could mean that most of the patients who have been confirmed to have COVID-19 have recovered. However, deaths data is almost on the floor in a straight line. This is related to the information mentioned earlier, and because most of the patients have recovered, the number of patients who have died will not be so high. Therefore, the graph of deaths data in the graph remains in a number close to zero.
+
+Now I will split the data into train set and test set. Train set would contain first 200 days, and test set would contain remaining 70 days. The split code is as follows.
+```python
+Train_set = dataset.iloc[0:200]
+Test_set = dataset.iloc[200:]
+```
+The train dataset size will be 200, and the test dataset size will be 70. We shoudl reshape the train dataset into a 2-dimensional array with one column. The dimension will increase consequently. We do this because MinMaxScaler only expects a 2-dimensional array.
+
+Then we import MinMaxScaler from sklearn.preprocessing module and scale the values. The features will be scaled in the range of (0,1). The scaler will be fit to the data with fit_transform() function.
+
+## (b)
+Before constructing LSTM model, we should preprocess the data. 
+```python
+Train_reshape = Train_set['Confirmed'].values.reshape(-1, 1)
+
+from sklearn.preprocessing import MinMaxScaler
+sc = MinMaxScaler(feature_range = (0, 1))
+
+Train_Scaled = sc.fit_transform(Train_reshape)
+```
+
+We now need to prepare the train/test data that can be used in LSTM models. First, for the train data, because the model should be able to use the previous 30 days' value, the for loop allows the train data to get 30 to 200 values, a total of 170 values. The x_train data will have values 30 days before the y_train data. These are expressed as i and i-30. They were changed to np.array values, respectively.
+```python
+X_train, y_train = [], []
+
+for i in range(30, 200):
+    X_train.append(Train_Scaled[i-30:i, 0])
+    y_train.append(Train_Scaled[i, 0])
+X_train, y_train = np.array(X_train), np.array(y_train)
+```
+
+Next is the test dataset. The size of the entire dataset(dataset_total) combined with the training dataset and test dataset is 270. The training dataset is assigned from 0 to 169 and the test dataset is assigned from 170 to 239. So the size of the training dataset is 170 and the size of the training dataset is 70.
+```python
+dataset_total = pd.concat((Train_set['Confirmed'], Test_set['Confirmed']), axis = 0)
+inputs = dataset_total[len(dataset_total) - len(Test_set) - 30:].values.reshape(-1, 1)
+Test_Scaled = sc.fit_transform(inputs)
+
+X_test = []
+for i in range(30, 100):
+    X_test.append(Test_Scaled[i-30:i, 0])
+X_test = np.array(X_test)
+```
+
+
+Now I will construct an LSTM model.
+Its number of unit is 50, and we have 5 LSTM layers. I added Dropout layer with the rate of 0.2. Lastly, I added Dense layer with 1 unit, which will enable use to get the output of the model. It has 1 unit, so it is appropriate for binary classification. I used Adam optimizer, and mean squared error for the loss function to compile the model.
+```python
+regressor = Sequential()
+
+regressor.add(LSTM(units = 50, return_sequences = True, input_shape = (X_train.shape[1], 1)))
+regressor.add(Dropout(0.2))
+
+regressor.add(LSTM(units = 50, return_sequences = True))
+regressor.add(Dropout(0.2))
+
+regressor.add(LSTM(units = 50, return_sequences = True))
+regressor.add(Dropout(0.2))
+
+regressor.add(LSTM(units = 50, return_sequences = True))
+regressor.add(Dropout(0.2))
+
+regressor.add(LSTM(units = 50))
+regressor.add(Dropout(0.2))
+
+regressor.add(Dense(units = 1))
+
+regressor.compile(optimizer = 'adam', loss = 'mean_squared_error')
+```
+
+I trained the model by fitting the training datasets : X_train, y_train. The final loss was 0.0058, which is a very small value. It implies the model training was successful.
+```python
+regressor.fit(X_train, y_train, epochs = 100)
+```
+
+I used regressor.predict function to predict the test dataset. I used sc.inverse_transform function to apply inverse transform on the predicted values.
+```python
+predicted_covid = regressor.predict(X_test)
+predicted_covid = sc.inverse_transform(predicted_covid)
+```
+
+Finally, I draw a plot that shows the prediction and the real value at the same time. The prediction seems to be done well, because the two graph's trend is similar. Thus this model well predicted the number of patients who are confirmed to have Covid.
+```python
+plt.plot(Date[200:], dataset['Confirmed'][200:], color='red', label='Real Covid Rate')
+plt.plot(Date[200:], predicted_covid, color = 'blue', label = 'Predicted Covid Rate')
+plt.title('Covid Rate Prediction - Confirmed')
+plt.legend(['True', 'Predicted'])
+plt.xlabel("Date")
+plt.ylabel("Number of Cases")
+plt.show()
+```
+
+This is the plot.
+
+
+
+![](/Users/shinsoyeon/Desktop/2.png)
+
+## (c)
+This time, I will predict using two variables: 'Confirmed' and 'Recovered'. So, we should change the train set. I got two columns from the train dataset, and reshaped them to the shape of (-1, 2). This means we have a dimension of 2 because we have two variables.
+```python
+Train_CR_reshape = Train_set[['Confirmed','Recovered']].values.reshape(-1, 2)
+```
+
+Actually, the process until compiling is almost the same with above. But, we should change the total dataset to contain two variables, and the dimension to be 2.
+```python
+Train_CR_Scaled = sc.fit_transform(Train_CR_reshape)
+
+
+X_train, y_train = [], []
+
+for i in range(30, 200):
+    X_train.append(Train_CR_Scaled[i-30:i, :])
+    y_train.append(Train_CR_Scaled[i, 0])
+X_train, y_train = np.array(X_train), np.array(y_train)
+
+dataset_total = pd.concat((Train_set[['Confirmed', 'Recovered']], Test_set[['Confirmed', 'Recovered']]), axis = 0)
+inputs = dataset_total[len(dataset_total) - len(Test_set) - 30:].values.reshape(-1, 2)
+Test_set_Scaled = sc.fit_transform(inputs)
+
+X_test = []
+for i in range(30, 100):
+    X_test.append(Test_set_Scaled[i-30:i, :])
+X_test = np.array(X_test)
+
+regressor = Sequential()
+
+regressor.add(LSTM(units = 50, return_sequences = True, input_shape = (X_train.shape[1], 2)))
+regressor.add(Dropout(0.2))
+
+regressor.add(LSTM(units = 50, return_sequences = True))
+regressor.add(Dropout(0.2))
+
+regressor.add(LSTM(units = 50, return_sequences = True))
+regressor.add(Dropout(0.2))
+
+regressor.add(LSTM(units = 50, return_sequences = True))
+regressor.add(Dropout(0.2))
+
+regressor.add(LSTM(units = 50))
+regressor.add(Dropout(0.2))
+
+regressor.add(Dense(units = 1))
+
+regressor.compile(optimizer = 'adam', loss = 'mean_squared_error')
+
+regressor.fit(X_train, y_train, epochs = 100)
+```
+
+The final loss is 0.0053.
+
+We have to reshape the output dimension, back to 1. I used sc.inverse_transform function to reshape it. I extracted only the first column, which is the prediction value.The code is as follows.
+```python
+predicted_covid_2 = regressor.predict(X_test)
+predicted_covid_2 = np.column_stack((predicted_covid_2, np.zeros_like(predicted_covid_2)))
+predicted_covid_2 = sc.inverse_transform(predicted_covid_2)
+predicted_covid_2 = predicted_covid_2[:, 0]
+```
+
+I draw a plot of the model prediction. Prediction graph shows similar trend with the real value.
+```python
+plt.plot(Date[200:], dataset['Confirmed'][200:], color='red', label='Real Covid Rate')
+plt.plot(Date[200:], predicted_covid_2, color = 'blue', label = 'Predicted Covid Rate')
+plt.title('Covid Rate Prediction - Confirmed, Recovered')
+plt.legend(['True', 'Predicted'])
+plt.xlabel("Date")
+plt.ylabel("Number of Cases")
+plt.show()
+```
+
+This is the plot.
+
+
+
+![](/Users/shinsoyeon/Desktop/3.png)
+
+
+## (d)
+This time, I will predict using three variables: 'Confirmed', 'Recovered', and 'Deaths'. I got three columns from the train dataset, and reshaped them to the shape of (-1, 3). This means we have a dimension of 3 because we have three variables.
+```python
+Train_CRD_Values = Train_set[['Confirmed','Recovered', 'Deaths']].values.reshape(-1, 3)
+```
+
+
+The process below is almost same as above.
+```python
+Train_Scaled = sc.fit_transform(Train_CRD_Values)
+
+X_train = []
+y_train = []
+for i in range(30, 200):
+    X_train.append(Train_Scaled[i-30:i, :])
+    y_train.append(Train_Scaled[i, 0])
+X_train, y_train = np.array(X_train), np.array(y_train)
+
+dataset_total = pd.concat((Train_set[['Confirmed', 'Recovered', 'Deaths']], Test_set[['Confirmed', 'Recovered', 'Deaths']]), axis = 0)
+inputs = dataset_total[len(dataset_total) - len(Test_set) - 30:].values.reshape(-1, 3)
+Test_Scaled = sc.fit_transform(inputs)
+
+X_test = []
+for i in range(30, 100):
+    X_test.append(Test_Scaled[i-30:i, :])
+X_test = np.array(X_test)
+
+regressor = Sequential()
+
+regressor.add(LSTM(units = 50, return_sequences = True, input_shape = (X_train.shape[1], 3)))
+regressor.add(Dropout(0.2))
+
+regressor.add(LSTM(units = 50, return_sequences = True))
+regressor.add(Dropout(0.2))
+
+regressor.add(LSTM(units = 50, return_sequences = True))
+regressor.add(Dropout(0.2))
+
+regressor.add(LSTM(units = 50, return_sequences = True))
+regressor.add(Dropout(0.2))
+
+regressor.add(LSTM(units = 50))
+regressor.add(Dropout(0.2))
+
+regressor.add(Dense(units = 1))
+
+regressor.compile(optimizer = 'adam', loss = 'mean_squared_error')
+
+regressor.fit(X_train, y_train, epochs = 100)
+```
+
+
+We have to reshape the output dimension, back to 1. I used sc.inverse_transform function to reshape it. I extracted only the first column, which is the prediction value.The code is as follows.
+```python
+predicted_covid_3 = regressor.predict(X_test)
+predicted_covid_3 = np.column_stack((predicted_covid_3, np.zeros_like(predicted_covid_3), np.zeros_like(predicted_covid_3)))
+predicted_covid_3 = sc.inverse_transform(predicted_covid_3)
+predicted_covid_3 = predicted_covid_3[:, 0]
+```
+
+The final loss is 0.0055.
+
+I draw a plot of the model prediction. Prediction graph shows similar trend with the real value.
+```python
+plt.plot(Date[200:], dataset['Confirmed'][200:], color='red', label='Real Covid Rate')
+plt.plot(Date[200:], predicted_covid_3, color = 'blue', label = 'Predicted Covid Rate')
+plt.title('Covid Rate Prediction - Confirmed, Recovered, Death')
+plt.legend(['True', 'Predicted'])
+plt.xlabel("Date")
+plt.ylabel("Number of Cases")
+plt.show()
+```
+This is the plot.
+
+
+![](/Users/shinsoyeon/Desktop/4.png)
+
+
+
+
+## (e)
+Now we should compare the prediction accuracy of three models above.
+```python
+real_value = dataset['Confirmed'][200:]
+plt.plot(Date[200:], real_value)
+plt.plot(Date[200:], predicted_covid)
+plt.plot(Date[200:], predicted_covid_2)
+plt.plot(Date[200:], predicted_covid_3)
+plt.legend(['Real Value', 'Prediction (b)', 'Prediction (c)', 'Prediction (d)'])
+plt.xlabel("Date")
+plt.title("Model Comparation")
+plt.ylabel("Number of Cases")
+plt.show()
+```
+
+I compared the performance of each model by using RMSE as a criteria. The smaller the RMSE value, the smaller the difference between the predicted value and the actual value, and it can be interpreted that the model did a good job of predicting.
+RMSE has a formula of $\sqrt{\frac{1}{n} \sum_{i=1}^n\left(y_i-\hat{y}_i\right)^2}$. I implemented this formula as a code as following.
+```python
+real_value = np.array(real_value).reshape(-1,1)
+
+RMSE_b = np.sqrt(np.mean((real_value - predicted_covid) ** 2))
+RMSE_c = np.sqrt(np.mean((real_value - predicted_covid_2) ** 2))
+RMSE_d = np.sqrt((np.mean((real_value - predicted_covid_3) ** 2)))
+
+print("RMSE_b: ", RMSE_b)
+print("RMSE_c: ", RMSE_c)
+print("RMSE_d: ", RMSE_d)
+
+min(RMSE_b, RMSE_c, RMSE_d)
+```
+This is the plot.
+
+
+
+![](/Users/shinsoyeon/Desktop/5.png)
+
+
+
+In conclusion, the smallest RMSE was the one of question 1-(b), which used one independent variable: 'Confirmed'. Thus, prediction (b) has the highest prediction performance.
+
+Prediction (b) had the fewest variables, but showed the best predictive performance, and (c) and (d) used more variables for prediction, but the predictive performance did not increase noticeably but rather decreased. It can be interpreted that having many independent variables does not necessarily improve predictive performance. In addition, if the value of a variable contains irregular patterns that interfere with prediction, it can lower predictive performance. Even if there are not many variables, it can be concluded that it is important to make predictions with high-quality variables.

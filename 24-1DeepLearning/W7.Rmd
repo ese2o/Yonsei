@@ -1,0 +1,461 @@
+---
+title: "HW7"
+author: "2021195007 Soyeon Shin"
+date: "2024-06-07"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Question 1
+## (a)
+
+First, I imported some necessary libraries to use in my code.
+```python
+import numpy as np
+import pylab as plt
+import networkx as nx
+```
+
+I had to set the points_list with all the edges that the network has. The points are all the available paths, for example, (0,1) is the path between node 0 and node 1. There are total 9 nodes.
+```python
+# map cell to cell, add circular cell to goal point
+points_list = [(0,1), (0,2),
+               (1,2), (1,7), (1,6),
+               (2,3), (2,4),
+               (3,4), (3,5),
+               (6,8), (6,7)]
+```
+
+I visualized the network with the code following. I used the code from **reinforce.ipynb**.
+```python
+G=nx.Graph()
+G.add_edges_from(points_list)
+pos = nx.spring_layout(G)
+nx.draw_networkx_nodes(G,pos)
+nx.draw_networkx_edges(G,pos)
+nx.draw_networkx_labels(G,pos)
+plt.show()
+```
+
+![](/Users/shinsoyeon/Desktop/1.png)
+
+## (b)
+Now we want to make our robot follow the path 0->1->7->6->8. I first created R matrix. it is 9*9 matrix, because we have total 9 nodes. The matrix components are all set with value of -1.
+```python
+MATRIX_SIZE = 9
+
+R = np.matrix(np.ones(shape=(MATRIX_SIZE, MATRIX_SIZE)))
+R *= -1
+print(R)
+```
+
+Now I created reward_points_list. This list contains the path that I want the robot to pass. I want robot's path to be 0-1-7-6-8, thus the point will be 0->1, 1->7, 7->6, 6->8.
+```python
+reward_points_list = [(0,1), (1,7), (7,6), (6,8)]
+```
+
+I have now set it up so that if the robot goes the way I want, it will be rewarded. First, I included both directions in the points_list. For example, I included (1,0) as well as (0, 1).
+
+If the route's destination is goal, the reward is set to 100. Also, if the route is on the reward_points_list, the reward is set to 50.
+The route that reverses the origin and destination of the route (point[:-1]) is also set to be the same.
+Finally, I set R[goal, goal] to 100 to set the reward on target arrival.
+
+I slightly altered the code of **reinforce.ipynb**.
+```python
+goal = 8
+
+for point in points_list:
+    if point[1] == goal:
+        R[point] = 100
+        R[point[::-1]] = 100
+    elif point in reward_points_list or point[::-1] in reward_points_list:
+        R[point] = 50
+        R[point[::-1]] = 50
+    else:
+        R[point] = 0
+        R[point[::-1]] = 0
+
+R[goal,goal]= 100
+```
+
+## (c)
+Now I run and trained my robot, 700 times with $\gamma = 0.7$. I used the code from **reinforce.ipynb**, but changed initial state to 0, gamma to 0.7.
+
+```python
+Q = np.matrix(np.zeros([MATRIX_SIZE,MATRIX_SIZE]))
+initial_state = 0
+gamma = 0.7
+
+def available_actions(state):
+    current_state_row = R[state,]
+    av_act = np.where(current_state_row >= 0)[1]
+    return av_act
+
+available_act = available_actions(initial_state)
+
+def sample_next_action(available_actions_range):
+    next_action = int(np.random.choice(available_act,1)[0])
+    return next_action
+
+action = sample_next_action(available_act)
+
+
+
+def update(current_state, action, gamma):
+    
+  max_index = np.where(Q[action,] == np.max(Q[action,]))[1]
+  
+  if max_index.shape[0] > 1:
+      max_index = int(np.random.choice(max_index, size = 1)[0])
+  else:
+      max_index = int(max_index[0])
+  max_value = Q[action, max_index]
+  
+  Q[current_state, action] = R[current_state, action] + gamma * max_value
+  print('max_value', R[current_state, action] + gamma * max_value)
+  
+  if (np.max(Q) > 0):
+    return(np.sum(Q/np.max(Q)*100))
+  else:
+    return (0)
+    
+update(initial_state, action, gamma)
+```
+
+
+The outcome was as following.
+```
+max_value 50.0
+100.0
+```
+
+I trained with iteration 700, which is set with for loop, **for i in range(700)**. I changed the while loop to stop when it arrives at 8, which is the goal point.
+```python
+Q = np.matrix(np.zeros([MATRIX_SIZE,MATRIX_SIZE]))
+
+# Training
+scores = []
+for i in range(700):
+    current_state = np.random.randint(0, int(Q.shape[0]))
+    available_act = available_actions(current_state)
+    action = sample_next_action(available_act)
+    score = update(current_state,action,gamma)
+    scores.append(score)
+    print ('Score:', str(score))
+    
+print("Trained Q matrix:")
+print(Q/np.max(Q)*100)
+
+# Testing
+current_state = 0
+steps = [current_state]
+
+
+while current_state != 8:
+
+    next_step_index = np.where(Q[current_state,] == np.max(Q[current_state,]))[1]
+    
+    if next_step_index.shape[0] > 1:
+        next_step_index = int(np.random.choice(next_step_index, size = 1))
+    else:
+        next_step_index = int(next_step_index)
+    
+    steps.append(next_step_index)
+    current_state = next_step_index
+
+print("Most efficient path:")
+print(steps)
+```
+
+I printed the most efficient path, and it was printed as I intended.
+```
+Most efficient path:
+[0, 1, 7, 6, 8]
+```
+
+The trained Q matrix was:
+```
+Trained Q matrix:
+[[  0.          67.15        36.505        0.           0.
+    0.           0.           0.           0.        ]
+ [ 62.0049999    0.          36.505        0.           0.
+    0.          70.          74.5          0.        ]
+ [ 47.0049999   52.15         0.          25.55349993  25.55349993
+    0.           0.           0.           0.        ]
+ [  0.           0.          36.505        0.          25.5535
+   17.88745      0.           0.           0.        ]
+ [  0.           0.          36.505       25.5535       0.
+    0.           0.           0.           0.        ]
+ [  0.           0.           0.          25.5535       0.
+    0.           0.           0.           0.        ]
+ [  0.          52.15         0.           0.           0.
+    0.           0.          74.5        100.        ]
+ [  0.          67.15         0.           0.           0.
+    0.          85.           0.           0.        ]
+ [  0.           0.           0.           0.           0.
+    0.         100.           0.         100.        ]]
+```
+
+I also drew a plot of scores.
+
+```python
+plt.plot(scores)
+plt.show()
+```
+
+This is the plot.
+
+![](/Users/shinsoyeon/Desktop/2.png)
+
+
+## (d)
+Now I applied environmental details on the network.
+
+I drew the network, this time with the environmental factors written. I slightly altered the code from **reinforce.ipynb**. 
+```python
+G=nx.Graph()
+G.add_edges_from(points_list)
+mapping={0:'0 - Start', 1:'1 - Bees', 2:'2 - Smoke', 3:'3 - Smoke', 4:'4', 5:'5', 6:'6 - Bees', 7:'7 - Smoke', 8:'8 - Goal'} 
+H=nx.relabel_nodes(G,mapping) 
+pos = nx.spring_layout(H)
+nx.draw_networkx_nodes(H, pos, node_size=[200,200,200,200,200,200,200,200,200])
+nx.draw_networkx_edges(H,pos)
+nx.draw_networkx_labels(H,pos)
+plt.show()
+```
+
+This is the plot.
+
+
+
+![](/Users/shinsoyeon/Desktop/3.png)
+I assigned the node at each list.
+```python
+bees = [1, 6, 7]
+smoke = [2, 3]
+```
+
+
+Since we are looking for a route to the hive, we need to give a positive reward if there is bee, and if there is smoke, it should have a negative impact so that the robot can identify environmental factors and go to the optimal route.
+I slightly altered the code from **reinforce.ipynb** to have gamma = 0.7, initial state = 0. 
+```python
+gamma = 0.7
+
+Q = np.matrix(np.zeros([MATRIX_SIZE,MATRIX_SIZE]))
+
+enviro_bees = np.matrix(np.zeros([MATRIX_SIZE,MATRIX_SIZE]))
+enviro_smoke = np.matrix(np.zeros([MATRIX_SIZE,MATRIX_SIZE]))
+ 
+initial_state = 0
+
+def available_actions(state):
+    current_state_row = R[state,]
+    av_act = np.where(current_state_row >= 0)[1]
+    return av_act
+ 
+def sample_next_action(available_actions_range):
+    next_action = int(np.random.choice(available_act,1)[0])
+    return next_action
+
+def collect_environmental_data(action):
+    found = []
+    if action in bees:
+        found.append('b')
+
+    if action in smoke:
+        found.append('s')
+    return (found)
+ 
+available_act = available_actions(initial_state) 
+ 
+action = sample_next_action(available_act)
+
+def update(current_state, action, gamma):
+  max_index = np.where(Q[action,] == np.max(Q[action,]))[1]
+  
+  if max_index.shape[0] > 1:
+      max_index = int(np.random.choice(max_index, size = 1)[0])
+  else:
+      max_index = int(max_index[0])
+  max_value = Q[action, max_index]
+  
+  Q[current_state, action] = R[current_state, action] + gamma * max_value
+  print('max_value', R[current_state, action] + gamma * max_value)
+  
+  environment = collect_environmental_data(action)
+  if 'b' in environment: 
+    enviro_bees[current_state, action] += 1
+  
+  if 's' in environment: 
+    enviro_smoke[current_state, action] += 1
+  
+  if (np.max(Q) > 0):
+    return(np.sum(Q/np.max(Q)*100))
+  else:
+    return (0)
+
+update(initial_state,action,gamma)
+
+scores = []
+for i in range(700):
+    current_state = np.random.randint(0, int(Q.shape[0]))
+    available_act = available_actions(current_state)
+    action = sample_next_action(available_act)
+    score = update(current_state,action,gamma)
+
+# print environmental matrices
+print('Bees Found')
+print(enviro_bees)
+print('Smoke Found')
+print(enviro_smoke)
+```
+The outcome is in the ipynb file.
+
+Now I applied positive & negative rewards and trained the robot 700 times. I used the code from **reinforce.ipynb**
+```python
+Q = np.matrix(np.zeros([MATRIX_SIZE,MATRIX_SIZE]))
+
+# subtract bees with smoke, this gives smoke a negative effect
+enviro_matrix = enviro_bees - enviro_smoke
+
+# Get available actions in the current state
+available_act = available_actions(initial_state) 
+
+# Sample next action to be performed
+action = sample_next_action(available_act)
+
+# This function updates the Q matrix according to the path selected and the Q 
+# learning algorithm
+def update(current_state, action, gamma):
+    
+    max_index = np.where(Q[action,] == np.max(Q[action,]))[1]
+
+    if max_index.shape[0] > 1:
+        max_index = int(np.random.choice(max_index, size = 1)[0])
+    else:
+        max_index = int(max_index[0])
+    max_value = Q[action, max_index]
+
+    Q[current_state, action] = R[current_state, action] + gamma * max_value
+    print('max_value', R[current_state, action] + gamma * max_value)
+
+    environment = collect_environmental_data(action)
+    if 'b' in environment: 
+        enviro_matrix[current_state, action] += 1
+    if 's' in environment: 
+        enviro_matrix[current_state, action] -= 1
+
+    return(np.sum(Q/np.max(Q)*100))
+
+update(initial_state,action,gamma)
+
+enviro_matrix_snap = enviro_matrix.copy()
+
+def available_actions_with_enviro_help(state):
+    current_state_row = R[state,]
+    av_act = np.where(current_state_row >= 0)[1]
+    # if there are multiple routes, dis-favor anything negative
+    env_pos_row = enviro_matrix_snap[state,av_act]
+    if (np.sum(env_pos_row < 0)):
+        # can we remove the negative directions from av_act?
+        temp_av_act = av_act[np.array(env_pos_row)[0]>=0]
+        if len(temp_av_act) > 0:
+            print('going from:',av_act)
+            print('to:',temp_av_act)
+            av_act = temp_av_act
+    return av_act
+
+# Training
+scores = []
+for i in range(700):
+    current_state = np.random.randint(0, int(Q.shape[0]))
+    available_act = available_actions_with_enviro_help(current_state)
+    action = sample_next_action(available_act)
+    score = update(current_state,action,gamma)
+    scores.append(score)
+    print ('Score:', str(score))
+ 
+
+plt.plot(scores)
+plt.show()
+
+```
+
+
+
+This is the plot.
+
+
+![](/Users/shinsoyeon/Desktop/4.png)
+
+Then I printed the Trained Q matrix.
+```python
+print("Trained Q matrix:")
+print(Q/np.max(Q)*100)
+```
+
+The Q matrix outcome is as follows.
+
+```
+Trained Q matrix:
+[[  0.          67.15         0.           0.           0.
+    0.           0.           0.           0.        ]
+ [ 62.00499996   0.           0.           0.           0.
+    0.          69.99999998  74.49999999   0.        ]
+ [ 47.00499996  52.14999728   0.           0.          25.55349867
+    0.           0.           0.           0.        ]
+ [  0.           0.           0.           0.          25.55349867
+   12.52121435   0.           0.           0.        ]
+ [  0.           0.          36.5049981   17.88744907   0.
+    0.           0.           0.           0.        ]
+ [  0.           0.           0.          17.88744907   0.
+    0.           0.           0.           0.        ]
+ [  0.          52.14999955   0.           0.           0.
+    0.           0.          74.49999999  99.99999997]
+ [  0.          67.14999956   0.           0.           0.
+    0.          84.99999998   0.           0.        ]
+ [  0.           0.           0.           0.           0.
+    0.          99.99999999   0.         100.        ]]
+```
+
+
+
+Now I tested the robot whether it is well trained.
+```python
+# Testing
+current_state = 0
+steps = [current_state]
+
+while current_state != 8:
+
+    next_step_index = np.where(Q[current_state,] == np.max(Q[current_state,]))[1]
+    
+    if next_step_index.shape[0] > 1:
+        next_step_index = int(np.random.choice(next_step_index, size = 1))
+    else:
+        next_step_index = int(next_step_index)
+    
+    steps.append(next_step_index)
+    current_state = next_step_index
+
+print("Most efficient path:")
+print(steps)
+```
+
+
+This is the outcome, the optimal path from the trained Q matrix.
+```
+Most efficient path:
+[0, 1, 7, 6, 8]
+```
+
+
+I compared the outcome with (b).
+The outcome of training (b) was [0,1,7,6,8], which is same with (d). It implies that environmental details were well trained. It avoided the node that has smoke(2,3), and still favored the node with bees(1,6,7).
+
+(b)The Q matrix of was learned about various paths and behaviors, so more diverse paths were considered. This can be seen as the result of a good balance between exploration and learning in reinforcement learning.
+(d)The Q matrix of has been trained on a specific path, which may be the result of limited exploration due to environmental factors. Rewards have been made for preferred paths and non-preferred paths have been excluded. Therefore, (b) and (d) have the same results, but we can see that the process of being learned is different.
+Also, in (d) with environment information, the score converges faster than score of (b) - without environment information.

@@ -1,0 +1,110 @@
+---
+title: "HW4"
+author: "2021195007 Soyeon Shin"
+date: "2024-05-05"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Question 1
+## (a)
+### tf.keras.layers.Dense
+
+(1) 'tf.keras.layers.Dense' creates a dense layer of the model and connects all nodes, thus makes the fully connected layer. It implements the formula: output = activation function(dot(input, kernel)+bias), where kernel is the weights matrix.
+
+(2) 'tf.keras.layers.Dense' has arguments as follows.
+- units: dimensionality of the output space
+- activation: activation function to use ex. 'relu'
+- use_bias: whether the layer uses bias parameter
+- kernel_initializer: initializes the kernel(weights matrix)
+- bias_initializer: initializes the bias
+- kernel_regularizer: regularizes the kernel
+- bias_regularizer: regularizes the bias
+- activity_regularizer: regularizes the output layer(activation function)
+- kernel_constraint: constraints the kernel
+- bias_constraint: constraints the bias
+- lora_rank: optional integer that can implement Low-Rank Adaptation with the provided rank in the layer's forward pass. If set, the layer's kernel becomes non-trainable and is replaced with a delta over the original kernel. Delta is obtained by multiplying two lower-rank trainable matrices. It can ultimately reduce the computation cost.
+
+### tf.keras.layers.Dropout
+
+(1) 'tf.keras.layers.Dropout' is a layer that implements Dropout. It drops input at a rate between 0 and 1, and consequently enables faster and more efficient training, and prevents overfitting.
+
+(2) 'tf.keras.layers.Dropout' has arguments as follows.
+- rate: decides the ratio(fraction) of the input units to drop, in range [0,1]
+- noise_shape: decides the shape of binary dropout mask. The mask will be multiplied with the input and implement the dropout
+- seed: decides the randomness of dropout
+
+## (b)
+
+In this question, I built my own neural network. The code is as follows.
+
+```python
+model = tf.keras.models.Sequential([
+    normalizer,
+    tf.keras.layers.Dense(512, activation = 'relu'),
+    tf.keras.layers.Dense(128, activation = 'relu'),
+    tf.keras.layers.Dense(64, activation = 'relu'),
+    tf.keras.layers.Dropout(rate=0.1),
+    tf.keras.layers.Dense(1, activation = 'sigmoid')
+])
+```
+I used model.summary function to report the structure of my neural network. I used three hidden dense layers. Each layers had 512, 128, 64 number of nodes. I used ReLU activation function for every layer. Next, I used dropout layer for regularization. Finally, I got final output from the dense layer that uses sigmoid function. Its shape should be (, 1) because we are performing binary classification.
+
+![](/Users/shinsoyeon/Desktop/image1.png)
+
+## (c)
+
+I compiled my model through model.compile function.
+
+```python
+model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+```
+
+### (1)
+Binary cross-entropy is a loss function that measures the difference between the actual class and the model's prediction. 
+
+To effectively solve the binary classification problem using data with binary labels, it is preferable to use binary cross-entropy, which is specifically tailored for binary tasks. It is more simplified than cross-entropy. We aim to minimize this loss function during model training.
+
+### (2)
+
+I fit the neural network using model.fit function. I set the epochs to 50.
+
+```
+model.fit(x_train, y_train, epochs = 50)
+```
+
+### (3)
+
+This is the report of the accuracy of my model: 0.9389. I used model.evaluate function to get the final accuracy.
+
+
+![](/Users/shinsoyeon/Desktop/image2.png)
+
+## (d)
+
+I loaded the test data in a similar way and fitted the neural network to the training data set. The code is as follows.
+
+```python
+# load the dataset
+dataset_test = loadtxt('healthTest.csv', delimiter=',')
+# split into input (X) and output (y) variables
+x_test = dataset_test[:,0:4]
+y_test = dataset_test[:,4]
+print(x_test.shape)
+print(y_test.shape)
+
+# Compiling the model
+model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+model.fit(x_test, y_test, epochs = 50)
+
+model.evaluate(x_test, y_test)
+```
+
+I used model.evaluate function to report the accuracy: 0.9501.
+
+
+![](/Users/shinsoyeon/Desktop/image3.png)

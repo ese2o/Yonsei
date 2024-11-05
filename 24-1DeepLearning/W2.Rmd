@@ -1,0 +1,371 @@
+---
+title: "HW02"
+author: "2021195007 Soyeon Shin"
+date: "2024-04-08"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Question 1
+
+### (a) Simulate the dataset as follows.
+i. Let $\mathbf{X}_i \in \mathbb{R}^{100}$ be the predictors (covariates) for $i$th observation. For $i$ = 1, ··· , 500, simulate $\mathbf{X}_i \sim N(\mathbf{0}, \mathbf{I})$ independently (i.e., total $N$ = 500 samples). Here $\mathbf{I} \in \mathbb{R}^{100 \times 100}$ is an identity matrix.
+
+
+I will simulate the dataset which is a matrix with N=500 samples and 100 predictors(covariates). Each matrix will follow a standard normal distribution.
+```{r}
+set.seed(1)
+N<-500
+p<-100
+
+X<-matrix(rnorm(N*p), ncol=p)
+```
+I will confirm the dimension of X: (500,100).
+```{r, echo=TRUE, results='markup'}
+dim(X)
+```
+
+ii. Simulate $Y_i \sim N(X\prime_i\beta,30)$ independently. The first 20 elements of $\beta \in \mathbb{R}^{100}$ is (1,2,3,4,5,6,7,8,9,10,-1,-2,-3,-4,-5,-6,-7,-8,-9,-10) and the remaining elements are all zero (i.e., 20 coefficients are non-zero and 80 coefficients are zero).
+
+I set beta following the requirements. Y will follow a normal distribution with a mean of X$\beta$ and standard deviation of sqrt(30). I will represent this by adding rnorm with mean=0/standard deviation=sqrt(30) to X$\beta$.
+```{r, echo=TRUE, results='markup'}
+beta <- c(1:10, -(1:10), rep(0, p-20))
+Y <- X %*% beta + rnorm(N, mean = 0, sd = sqrt(30))
+
+```
+
+iii. Divide the simulated dataset into training (350 number of samples) and test sets (150 number of samples).
+
+I will divide the dataset into training dataset(350 samples) and test dataset(150 samples), X and Y respectively. 
+```{r, echo=TRUE, results='markup'}
+train_X <- X[1:350,]
+test_X <- X[351:500,]
+
+train_Y <- Y[1:350]
+test_Y <- Y[351:500]
+```
+
+I will confirm the dimension of each.
+```{r, echo=TRUE, results='markup'}
+dim(train_X)
+dim(as.matrix(train_Y))
+dim(test_X)
+dim(as.matrix(test_Y))
+```
+
+### (b) Fit the ridge regression using the training dataset. Using cv.glmnet and glmnet functions, find the best $\lambda$ value for the ridge regression.
+
+Now I will fit the ridge regression using glmnet functions.
+```{r, echo=TRUE, results='hide'}
+library(glmnet)
+```
+
+Setting alpha=0 gives ridge regression. I will try 100 different lambda values to find the best lambda value for the ridge regression.
+```{r echo=TRUE, results='markup'}
+rr=glmnet(x=train_X,y=train_Y,alpha=0,nlambda=100)
+plot(rr,xvar="lambda")
+```
+
+I will use k-fold cross validation to find the best lambda. I will set K=10.
+```{r echo=TRUE, results='markup'}
+cv.rr=cv.glmnet(x=train_X,y=train_Y,alpha=0,nfolds=10,nlambda=100)
+```
+
+The minimum value(lambda.rr) will be the best lambda value.
+```{r echo=TRUE, results='markup'}
+lambda.rr=cv.rr$lambda.min
+lambda.rr
+```
+
+### (c) Calculate standard errors of ridge coefficient estimates.
+$\widehat{\beta}_{\text {ridge }}^\lambda$ equation is as follows.
+
+$$
+\widehat{\beta}_{\text {ridge }}^\lambda=\left(X^T X+\lambda I_p\right)^{-1} X^T y
+$$
+
+We should calculate variance of $\widehat{\beta}_{\text {ridge }}^\lambda$, and its equation is as follows.
+$$
+\operatorname{Var}\left(\hat{\beta}_{\text {ridge }}^\lambda \right)=\sigma^2\left(X^{\top} X+\lambda I_p\right)^{-1} X^{\top} X\left(X^{\top} X+\lambda I_p\right)^{-1}
+$$
+I will calculate standard errors of ridge coefficient estimates with R. To calculate standard error, we should square root the diagonal matrix of variance. In order to reduce the length of the expression, I will express it by replacing a specific part with A.
+```{r echo=TRUE, results='markup'}
+A <- t(train_X) %*% train_X + lambda.rr*diag(100)
+var <- solve(A) %*% t(train_X) %*% train_X %*% solve(A) * 30
+
+beta.stderr <- sqrt(diag(var))
+beta.stderr
+```
+
+### (d) Repeat (b) for lasso regression.
+Now I will repeat the same process for lasso regression. alpha=1 gives lasso regression.
+```{r echo=TRUE, results='markup'}
+lasso <- glmnet(x=train_X,y=train_Y,alpha=1,nlambda=100)
+plot(lasso,xvar="lambda")
+```
+
+I will use k-fold cross validation to find the best lambda. I will set K=10.
+```{r echo=TRUE, results='markup'}
+cv.lasso <- cv.glmnet(x=train_X,y=train_Y,alpha=1,nfolds=10,nlambda=100)
+```
+
+The minimum value(lambda.lasso) will be the best lambda value.
+```{r echo=TRUE, results='markup'}
+lambda.lasso <- cv.lasso$lambda.min
+lambda.lasso
+```
+
+
+### (e) Calculate the followings from the three different methods (ols, ridge, lasso)
+
+I will compare MSPE and Bias from three different methods(ols, ridge, lasso). I will fit ols model as follows.
+```{r echo=TRUE, results='markup'}
+train <- as.data.frame(cbind(train_X, train_Y))
+ols <- lm(train_Y ~., data=train)
+```
+
+### i. MSPE
+
+$$
+\sqrt{\frac{1}{150} \sum_{i=1}^{150}\left(\widehat{Y}_{\text {pred }, i}-Y_{\text {test }, i}\right)^2}
+$$
+
+### Prediction
+We need predictions of each method to calculate MSPE.
+```{r echo=TRUE, results='markup'}
+lm.pred <- predict(ols, newdata=as.data.frame(test_X), type="response")
+rr.pred <- predict(cv.rr, newx = test_X, s='lambda.min')
+lasso.pred <- predict(cv.lasso, newx = test_X, s='lambda.min')
+```
+
+
+### MSPE Calculation
+Now I will calculate Mean square prediction error(MSPE).
+```{r echo=TRUE, results='markup'}
+mspe.ols <- sqrt(sum((lm.pred - test_Y)^2)/150)
+mspe.rr <- sqrt(sum((rr.pred - test_Y)^2)/150)
+mspe.lasso <- sqrt(sum((lasso.pred - test_Y)^2)/150)
+```
+
+### Interpretation of MSPE
+I will print each MSPE for interpretation.
+```{r echo=TRUE, results='markup'}
+mspe.ols
+mspe.rr
+mspe.lasso
+```
+
+Ridge regression has the largest MSPE value, and Lasso regression has the smallest MSPE value. MSPE refers to the mean square error between the predicted value and the actual value, so the smaller the value, the more accurate the prediction of the model. Thus, the prediction performance of LASSO Regression is the best.
+
+### ii. Bias
+$$
+\sqrt{\frac{1}{100} \sum_{i=1}^{100}\left(\beta_i-\widehat{\beta}_i\right)^2}
+$$
+
+To calculate Bias, we need to get values of estimated regression coefficients($\hat \beta$) from each model. We can get it by using coef function. The dimension of each $\hat \beta$ will be (100, 1).
+```{r echo=TRUE, results='markup'}
+betas.ols <- as.matrix(ols$coefficients[2:101])
+betas.rr <- as.matrix(coef(cv.rr, s="lambda.min")[2:101])
+betas.lasso <- as.matrix(coef(cv.lasso, s="lambda.min")[2:101])
+```
+
+### Bias Calculation
+Now we will calculate the Bias. We defined true regression coefficients as beta in the simulation of dataset.
+```{r echo=TRUE, results='markup'}
+bias.ols <- sqrt(sum((beta-betas.ols)^2)/100)
+bias.rr <- sqrt(sum((beta-betas.rr)^2)/100)
+bias.lasso <- sqrt(sum((beta-betas.lasso)^2)/100)
+```
+
+### Interpretation of Bias
+I will print each bias for interpretation.
+```{r echo=TRUE, results='markup'}
+bias.ols
+bias.rr
+bias.lasso
+```
+
+Similar with MSPE, Ridge regression has the largest bias value, and Lasso regression has the smallest bias value. Bias represents the average difference between the predicted and true values of the model, and the smaller the bias, the better the model describes the data. Therefore, the Lasso regression model has the highest interpretability.
+
+## Question 2
+Now I will repeat Problem 1 with N=2000. I will use 1400 samples as training and 600 samples as test sets. I added '2' after every names of variables.
+
+### Initial Settings
+```{r echo=TRUE, results='markup'}
+set.seed(1)
+```
+
+### 1. Dataset Simulation
+I replaced 500 with 2000.
+```{r echo=TRUE, results='markup'}
+N2<-2000
+p<-100
+
+X2<-matrix(rnorm(N2*p), ncol=p)
+```
+
+Confirm (2000,100).
+```{r echo=TRUE, results='markup'}
+dim(X2)
+```
+
+We can define beta and Y same as we did in question 1.
+```{r echo=TRUE, results='markup'}
+beta <- c(1:10, -(1:10), rep(0, p-20))
+Y2 <- X2 %*% beta + rnorm(N2, mean = 0, sd = sqrt(30))
+```
+
+Dividing dataset: Training dataset(1400 samples) and Test dataset(600 samples).
+```{r echo=TRUE, results='markup'}
+train_X2 <- X2[1:1400,]
+test_X2 <- X2[1401:2000,]
+
+train_Y2 <- Y2[1:1400]
+test_Y2 <- Y2[1401:2000]
+```
+
+### 2. Fit ridge regression model.
+We can follow the same process as we did in question 1.
+```{r echo=TRUE, results='markup'}
+library(glmnet)
+
+rr2=glmnet(x=train_X2,y=train_Y2,alpha=0,nlambda=100)
+plot(rr2,xvar="lambda")
+```
+
+I used 10-fold cross validation to find the best lambda.
+```{r echo=TRUE, results='markup'}
+cv.rr2=cv.glmnet(x=train_X2,y=train_Y2,alpha=0,nfolds=10,nlambda=100)
+```
+
+The best lambda value is as follows.
+```{r echo=TRUE, results='markup'}
+lambda.rr2=cv.rr2$lambda.min
+lambda.rr2
+```
+
+### 3. Calculate standard errors of ridge coefficient estimates.
+We can use the same formula as question 1. In order to reduce the length of the expression, I will express it by replacing a specific part with B.
+```{r echo=TRUE, results='markup'}
+
+B <- t(train_X2) %*% train_X2 + lambda.rr2*diag(100)
+
+var2 <- solve(B) %*% t(train_X2) %*% train_X2 %*% solve(B) * 30
+beta.stderr2 <- sqrt(diag(var2))
+beta.stderr2
+```
+
+### 4. Fit Lasso regression model.
+alpha=1 gives lasso regression.
+```{r echo=TRUE, results='markup'}
+lasso2=glmnet(x=train_X2,y=train_Y2,alpha=1,nlambda=100)
+plot(lasso2,xvar="lambda")
+```
+
+I used 10-fold cross validation to find the best lambda.
+```{r echo=TRUE, results='markup'}
+cv.lasso2=cv.glmnet(x=train_X2,y=train_Y2,alpha=1,nfolds=10,nlambda=100)
+```
+
+The best lambda value is as follows.
+```{r echo=TRUE, results='markup'}
+lambda.lasso2=cv.lasso2$lambda.min
+lambda.lasso2
+```
+
+### 5. Calculate MSPE and Bias from the three different methods(ols, ridge, lasso).
+I will first fit ols model.
+```{r echo=TRUE, results='markup'}
+train2 <- as.data.frame(cbind(train_X2, train_Y2))
+ols2 <- lm(train_Y2 ~., data=train2)
+```
+
+### Prediction
+This is the predictions of each method.
+```{r echo=TRUE, results='markup'}
+lm.pred2 <- as.matrix(predict(ols2, newdata=as.data.frame(test_X2), type="response"))
+rr.pred2 <- predict(cv.rr2, newx = test_X2, s='lambda.min')
+lasso.pred2 <- predict(cv.lasso2, newx = test_X2, s='lambda.min')
+```
+
+### MSPE Calculation
+This is the calculation of MSPE of each method.
+```{r echo=TRUE, results='markup'}
+mspe.ols2 <- sqrt(sum((lm.pred2 - test_Y2)^2)/600)
+mspe.rr2 <- sqrt(sum((rr.pred2 - test_Y2)^2)/600)
+mspe.lasso2 <- sqrt(sum((lasso.pred2 - test_Y2)^2)/600)
+```
+
+### Interpretation of MSPE
+```{r echo=TRUE, results='markup'}
+mspe.ols2
+mspe.rr2
+mspe.lasso2
+```
+
+Ridge regression has the largest MSPE value, and Lasso regression has the smallest MSPE value. As I mentioned before, the smaller the MSPE value, the more accurate the prediction of the model. Thus, the prediction performance of LASSO Regression is the best.
+
+\
+\
+We need to get estimated regression coefficients($\hat \beta$) to calculate bias. We can get it by using coef function. The dimension of each $\hat \beta$ will be (100, 1).
+```{r echo=TRUE, results='markup'}
+betas.ols2 <- as.matrix(ols2$coefficients[2:101])
+betas.rr2 <- as.matrix(coef(cv.rr2, s="lambda.min")[2:101])
+betas.lasso2 <- as.matrix(coef(cv.lasso2, s="lambda.min")[2:101])
+```
+
+### Bias Calculation
+We can calculate bias by using same formula with question 1.
+```{r echo=TRUE, results='markup'}
+bias.ols2 <- sqrt(sum((beta-betas.ols2)^2)/100)
+bias.rr2 <- sqrt(sum((beta-betas.rr2)^2)/100)
+bias.lasso2 <- sqrt(sum((beta-betas.lasso2)^2)/100)
+```
+
+### Interpretation of Bias
+```{r echo=TRUE, results='markup'}
+bias.ols2
+bias.rr2
+bias.lasso2
+```
+
+Ridge regression has the largest bias value, and Lasso regression has the smallest bias value. As I mentioned before, the smaller the bias, the better the model describes the data. Therefore, the Lasso regression model has the highest interpretability.
+
+### Comparison
+1. MSPE of ridge, lasso estimates
+```{r echo=TRUE, results='markup'}
+cat("MSPE for Ridge Regression for Question 1: ", mspe.rr, "\nMSPE for Ridge Regression for Question 2: ", mspe.rr2, "\n\nMSPE for Lasso Regression for Question 1 : ", mspe.lasso, "\nMSPE for Lasso Regression for Question 2 : ", mspe.lasso2)
+```
+This is the result of comparing the MSPE of Question 1 and Question 2, ridge and lasso respectively. It can be seen that both MSPE values are lowered in Question 2, where the N value is higher. This means that the prediction performance of the model is higher in Question2, and it can be inferred that if we have more samples in the dataset, the model will be able to predict more accurately.
+
+\
+\
+
+2. Bias of ridge, lasso estimates
+```{r echo=TRUE, results='markup'}
+cat("Bias for Ridge Regression for Question 1: ", bias.rr, "\nBias for Ridge Regression for Question 2: ", bias.rr2, "\n\nBias for Lasso Regression for Question 1 : ", bias.lasso, "\nBias for Lasso Regression for Question 2 : ", bias.lasso2)
+```
+This is the result of comparing the Bias of Question 1 and Question 2, ridge and lasso respectively. It can be seen that both Bias values are lowered in Question 2, where the N value is higher. This means that the interpretability of the model is higher in Question2, and it can be inferred that if we have more samples in the dataset, the model will have higher interpretability.
+\
+\
+
+3. Standard errors of ridge coefficients
+
+Standard error stands for the uncertainty of estimation. If the model can predict more accurately, we have lower uncertainty. The smaller the value of standard error, the better the performance of the model.
+```{r echo=TRUE, results='markup'}
+beta.stderr
+```
+
+```{r echo=TRUE, results='markup'}
+beta.stderr2
+```
+
+I subtracted beta.stderr2 to see which of two has higher value.
+```{r echo=TRUE, results='markup'}
+beta.stderr - beta.stderr2
+```
+
+Every value of the matrix above is positive, which means that the standard error of Question1 is higher. We can confirm that the model of Question2 can predict better. Thus we can infer that if we have larger N values, the model has lower standard error which leads to better performance.
